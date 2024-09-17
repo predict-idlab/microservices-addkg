@@ -1,0 +1,5 @@
+,experiment_created_at,experiment_started_at,experiment_finished_at,fault_name,fault_started_at,fault_finished_at,fault_kwargs,experiment_status,experiment_verdict
+0,1704039211,1704039212,1704039525,node-cpu-hog,1704039259,1704039505,"{'appNamespace': 'onlineboutique', 'appNode': 'node2.deucalionx.ilabt-imec-be.wall2.ilabt.iminds.be', 'experimentDuration': 110, 'experimentRampTime': 22}",Completed,Pass
+1,1704039571,1704039571,1704039881,pod-autoscaler,1704039616,1704039861,"{'appNamespace': 'onlineboutique', 'appLabel': 'recommendationservice', 'appKind': 'deployment', 'appReplicaCount': 2, 'experimentDuration': 1609, 'experimentRampTime': 243}",completed,Fail
+2,1704040047,1704040047,1704040238,pod-delete,1704040092,1704040218,"{'appNamespace': 'onlineboutique', 'appLabel': 'recommendationservice', 'appKind': 'deployment'}",Completed,Pass
+3,1704040275,1704040275,1704040585,pod-autoscaler,1704040319,1704040565,"{'appNamespace': 'onlineboutique', 'appLabel': 'currencyservice', 'appKind': 'deployment', 'appReplicaCount': 2, 'experimentDuration': 1753, 'experimentRampTime': 9}",completed,Fail

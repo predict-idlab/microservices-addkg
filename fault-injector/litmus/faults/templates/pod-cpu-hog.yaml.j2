@@ -1,0 +1,197 @@
+kind: Workflow
+apiVersion: argoproj.io/v1alpha1
+metadata:
+  name: {{ experimentName }}
+  namespace: {{ litmusNamespace | default("litmus") }}
+spec:
+  {% raw %}
+  templates:
+    - name: argowf-chaos
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      steps:
+        - - name: install-chaos-faults
+            template: install-chaos-faults
+            arguments: {}
+        - - name: pod-cpu-hog
+            template: pod-cpu-hog
+            arguments: {}
+        - - name: cleanup-chaos-resources
+            template: cleanup-chaos-resources
+            arguments: {}
+    - name: install-chaos-faults
+      inputs:
+        artifacts:
+          - name: install-chaos-faults
+            path: /tmp/pod-cpu-hog.yaml
+            raw:
+              data: >
+                apiVersion: litmuschaos.io/v1alpha1
+
+                description:
+                  message: |
+                    Injects cpu consumption on pods belonging to an app deployment
+                kind: ChaosExperiment
+
+                metadata:
+                  name: pod-cpu-hog
+                spec:
+                  definition:
+                    scope: Namespaced
+                    permissions:
+                      - apiGroups:
+                          - ""
+                          - "batch"
+                          - "litmuschaos.io"
+                        resources:
+                          - "jobs"
+                          - "pods"
+                          - "pods/log"
+                          - "events"
+                          - "chaosengines"
+                          - "chaosexperiments"
+                          - "chaosresults"
+                        verbs:
+                          - "create"
+                          - "list"
+                          - "get"
+                          - "patch"
+                          - "update"
+                          - "delete"
+                    image: "litmuschaos/go-runner:3.1.0"
+                    imagePullPolicy: Always
+                    args:
+                    - -c
+                    - ./experiments -name pod-cpu-hog
+                    command:
+                    - /bin/bash
+                    env:
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '30'
+
+                    - name: CHAOS_INTERVAL
+                      value: '10'
+
+                    ## Number of CPU cores to stress
+                    - name: CPU_CORES
+                      value: '1'
+
+                    ## Percentage of total pods to target
+                    - name: PODS_AFFECTED_PERC
+                      value: ''
+
+                    ## Period to wait before and after injection of chaos in sec
+                    - name: RAMP_TIME
+                      value: ''
+
+                    - name: TARGET_POD
+                      value: ''
+
+                    labels:
+                      name: pod-cpu-hog
+      outputs: {}
+      metadata: {}
+      container:
+        name: ""
+        image: litmuschaos/k8s:latest
+        command:
+          - sh
+          - -c
+        args:
+          - kubectl apply -f /tmp/pod-cpu-hog.yaml -n
+            {{ workflow.parameters.adminModeNamespace }}
+        resources: {}
+    - name: pod-cpu-hog
+      inputs:
+        artifacts:
+          - name: pod-cpu-hog
+            path: /tmp/chaosengine-pod-cpu-hog.yaml
+            raw:
+              data: >
+                apiVersion: litmuschaos.io/v1alpha1
+
+                kind: ChaosEngine
+
+                metadata:
+                  namespace: "{{ workflow.parameters.adminModeNamespace }}"
+                  labels:
+                    workflow_run_id: "{{ workflow.uid }}"
+                  annotations: {}
+                  generateName: pod-cpu-hog
+                spec:
+                  appinfo:
+                    appns: "{{ workflow.parameters.appNamespace }}"
+                    applabel: "app={{ workflow.parameters.appLabel }}"
+                    appkind: "{{ workflow.parameters.appKind }}"
+                  jobCleanUpPolicy: delete
+                  engineState: active
+                  chaosServiceAccount: litmus-admin
+                  experiments:
+                    - name: pod-cpu-hog
+                      spec:
+                        components:
+                          env:
+                            - name: TOTAL_CHAOS_DURATION
+                              value: "{{ workflow.parameters.experimentDuration }}"
+                            - name: RAMP_TIME
+                              value: "{{ workflow.parameters.experimentRampTime }}"
+                            - name: TARGET_CONTAINER
+                              value: "{{ workflow.parameters.appContainer }}"
+                            - name: CPU_CORES
+                              value: "1"
+                            - name: CHAOS_KILL_COMMAND
+                              value: >-
+                                kill -9 $(ps afx | grep "[md5sum] /dev/zero" | awk '{print$1}' | tr '
+
+                                ' ' ')
+      outputs: {}
+      metadata:
+        labels:
+          weight: "10"
+      container:
+        name: ""
+        image: docker.io/litmuschaos/litmus-checker:2.11.0
+        args:
+          - -file=/tmp/chaosengine-pod-cpu-hog.yaml
+          - -saveName=/tmp/engine-name
+        resources: {}
+    - name: cleanup-chaos-resources
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      container:
+        name: ""
+        image: litmuschaos/k8s:latest
+        command:
+          - sh
+          - -c
+        args:
+          - kubectl delete chaosengine -l workflow_run_id={{ workflow.uid }} -n
+            {{ workflow.parameters.adminModeNamespace }}
+        resources: {}
+  {% endraw %}
+  entrypoint: argowf-chaos
+  arguments:
+    parameters:
+      - name: adminModeNamespace
+        value: {{ litmusNamespace | default("litmus") }}
+      - name: experimentDuration
+        value: {{ experimentDuration | default("120") }}
+      - name: experimentRampTime
+        value: {{ experimentRampTime | default("") }}
+      - name: appNamespace
+        value: {{ appNamespace }}
+      - name: appLabel
+        value: {{ appLabel }}
+      - name: appKind
+        value: {{ appKind | default("deployment") }}
+      - name: appContainer
+        value: {{ appContainer | default("") }}
+  serviceAccountName: argo-chaos
+  securityContext:
+    runAsUser: 1000
+    runAsNonRoot: true
+status:
+  startedAt: null
+  finishedAt: null

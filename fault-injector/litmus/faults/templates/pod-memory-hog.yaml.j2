@@ -1,0 +1,304 @@
+kind: Workflow
+apiVersion: argoproj.io/v1alpha1
+metadata:
+  name: {{ experimentName }}
+  namespace: {{ litmusNamespace | default("litmus") }}
+spec:
+  {% raw %}
+  templates:
+    - name: argowf-chaos
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      steps:
+        - - name: install-chaos-faults
+            template: install-chaos-faults
+            arguments: {}
+        - - name: pod-memory-hog
+            template: pod-memory-hog
+            arguments: {}
+        - - name: cleanup-chaos-resources
+            template: cleanup-chaos-resources
+            arguments: {}
+    - name: install-chaos-faults
+      inputs:
+        artifacts:
+          - name: pod-memory-hog-sxp
+            path: /tmp/pod-memory-hog-sxp.yaml
+            raw:
+              data: >
+                apiVersion: litmuschaos.io/v1alpha1
+
+                description:
+                  message: |
+                    Injects memory consumption on pods belonging to an app deployment
+                kind: ChaosExperiment
+
+                metadata:
+                  name: pod-memory-hog
+                  labels:
+                    name: pod-memory-hog
+                    app.kubernetes.io/part-of: litmus
+                    app.kubernetes.io/component: chaosexperiment
+                    app.kubernetes.io/version: 3.1.0
+                spec:
+                  definition:
+                    scope: Namespaced
+                    permissions:
+                      - apiGroups:
+                          - ""
+                        resources:
+                          - pods
+                        verbs:
+                          - create
+                          - delete
+                          - get
+                          - list
+                          - patch
+                          - update
+                          - deletecollection
+                      - apiGroups:
+                          - ""
+                        resources:
+                          - events
+                        verbs:
+                          - create
+                          - get
+                          - list
+                          - patch
+                          - update
+                      - apiGroups:
+                          - ""
+                        resources:
+                          - configmaps
+                        verbs:
+                          - get
+                          - list
+                      - apiGroups:
+                          - ""
+                        resources:
+                          - pods/log
+                        verbs:
+                          - get
+                          - list
+                          - watch
+                      - apiGroups:
+                          - ""
+                        resources:
+                          - pods/exec
+                        verbs:
+                          - get
+                          - list
+                          - create
+                      - apiGroups:
+                          - apps
+                        resources:
+                          - deployments
+                          - statefulsets
+                          - replicasets
+                          - daemonsets
+                        verbs:
+                          - list
+                          - get
+                      - apiGroups:
+                          - apps.openshift.io
+                        resources:
+                          - deploymentconfigs
+                        verbs:
+                          - list
+                          - get
+                      - apiGroups:
+                          - ""
+                        resources:
+                          - replicationcontrollers
+                        verbs:
+                          - get
+                          - list
+                      - apiGroups:
+                          - argoproj.io
+                        resources:
+                          - rollouts
+                        verbs:
+                          - list
+                          - get
+                      - apiGroups:
+                          - batch
+                        resources:
+                          - jobs
+                        verbs:
+                          - create
+                          - list
+                          - get
+                          - delete
+                          - deletecollection
+                      - apiGroups:
+                          - litmuschaos.io
+                        resources:
+                          - chaosengines
+                          - chaosexperiments
+                          - chaosresults
+                        verbs:
+                          - create
+                          - list
+                          - get
+                          - patch
+                          - update
+                          - delete
+                    image: litmuschaos/go-runner:3.1.0
+                    imagePullPolicy: Always
+                    args:
+                      - -c
+                      - ./experiments -name pod-memory-hog
+                    command:
+                      - /bin/bash
+                    env:
+                      - name: TOTAL_CHAOS_DURATION
+                        value: "60"
+                      - name: MEMORY_CONSUMPTION
+                        value: "500"
+                      - name: NUMBER_OF_WORKERS
+                        value: "1"
+                      - name: PODS_AFFECTED_PERC
+                        value: ""
+                      - name: RAMP_TIME
+                        value: ""
+                      - name: LIB_IMAGE
+                        value: litmuschaos/go-runner:3.1.0
+                      - name: STRESS_IMAGE
+                        value: alexeiled/stress-ng:latest-ubuntu
+                      - name: CONTAINER_RUNTIME
+                        value: containerd
+                      - name: SOCKET_PATH
+                        value: /run/containerd/containerd.sock
+                      - name: SEQUENCE
+                        value: parallel
+                      - name: DEFAULT_HEALTH_CHECK
+                        value: "false"
+                      - name: TARGET_CONTAINER
+                        value: ""
+                      - name: TARGET_PODS
+                        value: ""
+                      - name: NODE_LABEL
+                        value: ""
+                    labels:
+                      name: pod-memory-hog
+                      app.kubernetes.io/part-of: litmus
+                      app.kubernetes.io/component: experiment-job
+                      app.kubernetes.io/runtime-api-usage: "true"
+                      app.kubernetes.io/version: 3.1.0
+      outputs: {}
+      metadata: {}
+      container:
+        name: ""
+        image: litmuschaos/k8s:2.11.0
+        command:
+          - sh
+          - -c
+        args:
+          - kubectl apply -f /tmp/ -n {{ workflow.parameters.adminModeNamespace }}
+            && sleep 30
+        resources: {}
+    - name: cleanup-chaos-resources
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      container:
+        name: ""
+        image: litmuschaos/k8s:2.11.0
+        command:
+          - sh
+          - -c
+        args:
+          - kubectl delete chaosengine -l workflow_run_id={{ workflow.uid }} -n
+            {{ workflow.parameters.adminModeNamespace }}
+        resources: {}
+    - name: pod-memory-hog
+      inputs:
+        artifacts:
+          - name: pod-memory-hog
+            path: /tmp/chaosengine-pod-memory-hog.yaml
+            raw:
+              data: |
+                apiVersion: litmuschaos.io/v1alpha1
+                kind: ChaosEngine
+                metadata:
+                  namespace: "{{ workflow.parameters.adminModeNamespace }}"
+                  labels:
+                    workflow_run_id: "{{ workflow.uid }}"
+                  generateName: pod-memory-hog
+                spec:
+                  engineState: active
+                  appinfo:
+                    appns: "{{ workflow.parameters.appNamespace }}"
+                    applabel: "app={{ workflow.parameters.appLabel }}"
+                    appkind: "{{ workflow.parameters.appKind }}"
+                  chaosServiceAccount: litmus-admin
+                  experiments:
+                    - name: pod-memory-hog
+                      spec:
+                        components:
+                          env:
+                            - name: TOTAL_CHAOS_DURATION
+                              value: "{{ workflow.parameters.experimentDuration }}"
+                            - name: RAMP_TIME
+                              value: "{{ workflow.parameters.experimentRampTime }}"
+                            - name: MEMORY_CONSUMPTION
+                              value: "250"
+                            - name: NUMBER_OF_WORKERS
+                              value: "1"
+                            - name: PODS_AFFECTED_PERC
+                              value: ""
+                            - name: LIB_IMAGE
+                              value: litmuschaos/go-runner:3.1.0
+                            - name: STRESS_IMAGE
+                              value: alexeiled/stress-ng:latest-ubuntu
+                            - name: CONTAINER_RUNTIME
+                              value: containerd
+                            - name: SOCKET_PATH
+                              value: /run/containerd/containerd.sock
+                            - name: SEQUENCE
+                              value: parallel
+                            - name: DEFAULT_HEALTH_CHECK
+                              value: "true"
+                            - name: TARGET_CONTAINER
+                              value: "{{ workflow.parameters.appContainer }}"
+                            - name: TARGET_PODS
+                              value: ""
+                            - name: NODE_LABEL
+                              value: ""
+      outputs: {}
+      metadata:
+        labels:
+          weight: "10"
+      container:
+        name: ""
+        image: docker.io/litmuschaos/litmus-checker:2.11.0
+        args:
+          - -file=/tmp/chaosengine-pod-memory.yaml
+          - -saveName=/tmp/engine-name
+        resources: {}
+  {% endraw %}
+  entrypoint: argowf-chaos
+  arguments:
+    parameters:
+      - name: adminModeNamespace
+        value: {{ litmusNamespace | default("litmus") }}
+      - name: experimentDuration
+        value: {{ experimentDuration | default("120") }}
+      - name: experimentRampTime
+        value: {{ experimentRampTime | default("") }}
+      - name: appNamespace
+        value: {{ appNamespace }}
+      - name: appLabel
+        value: {{ appLabel }}
+      - name: appKind
+        value: {{ appKind | default("deployment") }}
+      - name: appContainer
+        value: {{ appContainer | default("") }}
+  serviceAccountName: argo-chaos
+  podGC:
+    strategy: OnWorkflowCompletion
+  securityContext:
+    runAsUser: 1000
+    runAsNonRoot: true
+status: {}

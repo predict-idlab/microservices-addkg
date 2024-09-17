@@ -1,0 +1,6 @@
+gql[all]~=3.4.1
+sgqlc~=16.3
+jinja2~=3.1.2
+kubernetes~=28.1.0
+pandas~=2.1.4
+ruamel.yaml~=0.18.5
