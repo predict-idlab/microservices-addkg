@@ -15,4 +15,4 @@ This repository is structured as a monorepo containing multiple components:
 ## Data
 
 The knowledge graphs are hosted on Zenodo. They are stored as a series of Turtle (TTL) files.
-You can download the dataset [here](https://zenodo.org/record/5152153).
+You can download the dataset [here](https://zenodo.org/records/13772595).
